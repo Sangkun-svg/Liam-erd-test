@@ -1,71 +1,625 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-generator client {
-  provider = "prisma-client-js"
-}
+// schema.prisma
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id            Int       @id @default(autoincrement())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  posts         Post[]
-  accounts      Account[]
-  sessions      Session[]
+generator client {
+  provider = "prisma-client-js"
+}
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model AccessToken {
+  id         BigInt   @id @default(autoincrement())
+  user_id    BigInt
+  token      String
+  sha256     String   @unique
+  created_at DateTime
+  updated_at DateTime
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id], name: "index_access_tokens_on_user_id")
+  @@map("access_tokens")
+}
+
+model AccountAccess {
+  id         BigInt   @id @default(autoincrement())
+  account_id BigInt
+  user_id    BigInt
+  created_at DateTime
+  updated_at DateTime
+
+  account Account @relation(fields: [account_id], references: [id])
+  user    User    @relation(fields: [user_id], references: [id])
+
+  @@unique([account_id, user_id], name: "index_account_accesses_on_account_id_and_user_id")
+  @@map("account_accesses")
+}
+
+model AccountConfig {
+  id         BigInt   @id @default(autoincrement())
+  account_id BigInt
+  key       String
+  value     String
+  created_at DateTime
+  updated_at DateTime
+
+  account Account @relation(fields: [account_id], references: [id])
+
+  @@unique([account_id, key], name: "index_account_configs_on_account_id_and_key")
+  @@index([account_id], name: "index_account_configs_on_account_id")
+  @@map("account_configs")
+}
+
+model AccountLinkedAccount {
+  id               BigInt   @id @default(autoincrement())
+  account_id       BigInt
+  linked_account_id BigInt
+  account_type     String
+  created_at       DateTime
+  updated_at       DateTime
+
+  account        Account @relation("AccountLinkedAccount_account", fields: [account_id], references: [id])
+  linked_account Account @relation("AccountLinkedAccount_linked", fields: [linked_account_id], references: [id])
+
+  @@unique([account_id, linked_account_id], name: "idx_on_account_id_linked_account_id_48ab9f79d2")
+  @@index([account_id], name: "index_account_linked_accounts_on_account_id")
+  @@index([linked_account_id], name: "index_account_linked_accounts_on_linked_account_id")
+  @@map("account_linked_accounts")
 }
 
 model Account {
-  userId            Int
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         BigInt   @id @default(autoincrement())
+  name       String
+  timezone   String
+  locale     String
+  created_at DateTime
+  updated_at DateTime
+  uuid       String   @unique
+  archived_at DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@id([provider, providerAccountId])
+  @@map("accounts")
 }
 
-model Session {
-  id           Int      @id @default(autoincrement())
-  sessionToken String   @unique
-  userId       Int
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model ActiveStorageBlob {
+  id           BigInt   @id @default(autoincrement())
+  key          String   @unique
+  filename     String
+  content_type String?
+  metadata     String?
+  service_name String
+  byte_size    BigInt
+  checksum     String?
+  created_at   DateTime
+  uuid         String?  @unique
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@map("active_storage_blobs")
 }
 
-model Post {
-  id        Int     @id @default(autoincrement())
-  title     String
-  content   String?
-  published Boolean @default(false)
-  authorId  Int
-  author    User    @relation(fields: [authorId], references: [id])
+model ActiveStorageAttachment {
+  id          BigInt   @id @default(autoincrement())
+  name        String
+  uuid        String
+  record_type String
+  record_id   BigInt
+  blob_id     BigInt
+  created_at  DateTime
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  blob ActiveStorageBlob @relation(fields: [blob_id], references: [id])
+
+  @@index([blob_id], name: "index_active_storage_attachments_on_blob_id")
+  @@index([record_type, record_id, name, blob_id], name: "idx_on_record_type_record_id_name_blob_id_0be5805727")
+  @@index([uuid], name: "index_active_storage_attachments_on_uuid")
+  @@map("active_storage_attachments")
+}
+
+model ActiveStorageVariantRecord {
+  id               BigInt   @id @default(autoincrement())
+  blob_id          BigInt
+  variation_digest String
+
+  blob ActiveStorageBlob @relation(fields: [blob_id], references: [id])
+
+  @@unique([blob_id, variation_digest], name: "index_active_storage_variant_records_uniqueness")
+  @@map("active_storage_variant_records")
+}
+
+model CompletedDocument {
+  id           BigInt   @id @default(autoincrement())
+  submitter_id BigInt
+  sha256       String
+  created_at   DateTime
+  updated_at   DateTime
+
+  submitter Submitter @relation(fields: [submitter_id], references: [id])
+
+  @@index([sha256], name: "index_completed_documents_on_sha256")
+  @@index([submitter_id], name: "index_completed_documents_on_submitter_id")
+  @@map("completed_documents")
+}
+
+model CompletedSubmitter {
+  id              BigInt   @id @default(autoincrement())
+  submitter_id    BigInt
+  submission_id   BigInt
+  account_id      BigInt
+  template_id     BigInt?
+  source          String
+  sms_count       Int
+  completed_at    DateTime
+  created_at      DateTime
+  updated_at      DateTime
+  verification_method String?
+
+  @@index([account_id], name: "index_completed_submitters_on_account_id")
+  @@unique([submitter_id], name: "index_completed_submitters_on_submitter_id")
+  @@map("completed_submitters")
+}
+
+model Console1984Session {
+  id         BigInt   @id @default(autoincrement())
+  reason     String?
+  user_id    BigInt
+  created_at DateTime
+  updated_at DateTime
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([created_at], name: "index_console1984_sessions_on_created_at")
+  @@index([user_id, created_at], name: "index_console1984_sessions_on_user_id_and_created_at")
+  @@map("console1984_sessions")
+}
+
+model Console1984User {
+  id         BigInt   @id @default(autoincrement())
+  username   String
+  created_at DateTime
+  updated_at DateTime
+
+  @@index([username], name: "index_console1984_users_on_username")
+  @@map("console1984_users")
+}
+
+model Console1984SensitiveAccess {
+  id         BigInt   @id @default(autoincrement())
+  justification String?
+  session_id BigInt
+  created_at DateTime
+  updated_at DateTime
+
+  session Console1984Session @relation(fields: [session_id], references: [id])
+
+  @@index([session_id], name: "index_console1984_sensitive_accesses_on_session_id")
+  @@map("console1984_sensitive_accesses")
+}
+
+model Console1984Command {
+  id                 BigInt   @id @default(autoincrement())
+  statements         String?
+  sensitive_access_id BigInt?
+  session_id         BigInt
+  created_at         DateTime
+  updated_at         DateTime
+
+  sensitive_access Console1984SensitiveAccess? @relation(fields: [sensitive_access_id], references: [id])
+  session          Console1984Session         @relation(fields: [session_id], references: [id])
+
+  @@index([sensitive_access_id], name: "index_console1984_commands_on_sensitive_access_id")
+  @@index([session_id, created_at, sensitive_access_id], name: "on_session_and_sensitive_chronologically")
+  @@map("console1984_commands")
+}
+
+model DocumentGenerationEvent {
+  id         BigInt   @id @default(autoincrement())
+  submitter_id BigInt
+  event_name String
+  created_at DateTime
+  updated_at DateTime
+
+  submitter Submitter @relation(fields: [submitter_id], references: [id])
+
+  // 부분 인덱스(where event_name in ('start','complete'))는 Prisma에서 그대로 표현 X
+  @@index([submitter_id, event_name], name: "index_document_generation_events_on_submitter_id_and_event_name")
+  @@index([submitter_id], name: "index_document_generation_events_on_submitter_id")
+  @@map("document_generation_events")
+}
+
+model EmailEvent {
+  id              BigInt   @id @default(autoincrement())
+  account_id      BigInt
+  emailable_type  String
+  emailable_id    BigInt
+  message_id      String
+  tag             String
+  event_type      String
+  email           String
+  data            String
+  event_datetime  DateTime
+  created_at      DateTime
+
+  account Account @relation(fields: [account_id], references: [id])
+
+  @@index([account_id, event_datetime], name: "index_email_events_on_account_id_and_event_datetime")
+  @@index([email], name: "index_email_events_on_email")
+  // 부분 인덱스(bounce 계열)는 생략
+  @@index([emailable_type, emailable_id], name: "index_email_events_on_emailable")
+  @@index([message_id], name: "index_email_events_on_message_id")
+  @@map("email_events")
+}
+
+model EmailMessage {
+  id         BigInt   @id @default(autoincrement())
+  uuid       String   @unique
+  author_id  BigInt
+  account_id BigInt
+  subject    String
+  body       String
+  sha1       String
+  created_at DateTime
+  updated_at DateTime
+
+  author  User    @relation(fields: [author_id], references: [id])
+  account Account @relation(fields: [account_id], references: [id])
+
+  @@index([account_id], name: "index_email_messages_on_account_id")
+  @@index([sha1], name: "index_email_messages_on_sha1")
+  @@map("email_messages")
+}
+
+model EncryptedConfig {
+  id         BigInt   @id @default(autoincrement())
+  account_id BigInt
+  key        String
+  value      String
+  created_at DateTime
+  updated_at DateTime
+
+  account Account @relation(fields: [account_id], references: [id])
+
+  @@unique([account_id, key], name: "index_encrypted_configs_on_account_id_and_key")
+  @@index([account_id], name: "index_encrypted_configs_on_account_id")
+  @@map("encrypted_configs")
+}
+
+model EncryptedUserConfig {
+  id         BigInt   @id @default(autoincrement())
+  user_id    BigInt
+  key        String
+  value      String
+  created_at DateTime
+  updated_at DateTime
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@unique([user_id, key], name: "index_encrypted_user_configs_on_user_id_and_key")
+  @@index([user_id], name: "index_encrypted_user_configs_on_user_id")
+  @@map("encrypted_user_configs")
+}
+
+model LockEvent {
+  id         BigInt   @id @default(autoincrement())
+  key        String
+  event_name String
+  created_at DateTime
+  updated_at DateTime
+
+  @@unique([event_name, key], name: "index_lock_events_on_event_name_and_key")
+  @@index([key], name: "index_lock_events_on_key")
+  @@map("lock_events")
+}
+
+model OAuthApplication {
+  id         BigInt   @id @default(autoincrement())
+  name       String
+  uid        String   @unique
+  secret     String
+  redirect_uri String?
+  scopes     String   @default("")
+  confidential Boolean @default(true)
+  created_at DateTime
+  updated_at DateTime
+
+  @@map("oauth_applications")
+}
+
+model OAuthAccessGrant {
+  id                BigInt   @id @default(autoincrement())
+  resource_owner_id BigInt
+  application_id    BigInt
+  token             String   @unique
+  expires_in        Int
+  redirect_uri      String
+  scopes            String   @default("")
+  created_at        DateTime
+  revoked_at        DateTime?
+
+  application OAuthApplication @relation(fields: [application_id], references: [id])
+  resource_owner User          @relation(fields: [resource_owner_id], references: [id])
+
+  @@index([application_id], name: "index_oauth_access_grants_on_application_id")
+  @@index([resource_owner_id], name: "index_oauth_access_grants_on_resource_owner_id")
+  @@map("oauth_access_grants")
+}
+
+model OAuthAccessToken {
+  id                    BigInt   @id @default(autoincrement())
+  resource_owner_id     BigInt?
+  application_id        BigInt
+  token                 String   @unique
+  refresh_token         String?  @unique
+  expires_in            Int?
+  scopes                String?
+  created_at            DateTime
+  revoked_at            DateTime?
+  previous_refresh_token String  @default("")
+
+  application    OAuthApplication @relation(fields: [application_id], references: [id])
+  resource_owner User?            @relation(fields: [resource_owner_id], references: [id])
+
+  @@index([application_id], name: "index_oauth_access_tokens_on_application_id")
+  @@index([resource_owner_id], name: "index_oauth_access_tokens_on_resource_owner_id")
+  @@map("oauth_access_tokens")
+}
+
+model SubmissionEvent {
+  id              BigInt   @id @default(autoincrement())
+  submission_id   BigInt
+  submitter_id    BigInt?
+  data            String
+  event_type      String
+  event_timestamp DateTime
+  created_at      DateTime
+  updated_at      DateTime
+
+  submission Submission @relation(fields: [submission_id], references: [id])
+  submitter  Submitter? @relation(fields: [submitter_id], references: [id])
+
+  @@index([created_at], name: "index_submission_events_on_created_at")
+  @@index([submission_id], name: "index_submission_events_on_submission_id")
+  @@index([submitter_id], name: "index_submission_events_on_submitter_id")
+  @@map("submission_events")
+}
+
+model Submission {
+  id                 BigInt   @id @default(autoincrement())
+  template_id        BigInt?
+  created_by_user_id BigInt?
+  archived_at        DateTime?
+  created_at         DateTime
+  updated_at         DateTime
+  template_fields    String?
+  template_schema    String?
+  template_submitters String?
+  source             String
+  submitters_order   String
+  slug               String   @unique
+  preferences        String
+  account_id         BigInt
+  expire_at          DateTime?
+  name               String?
+  variables_schema   String?
+  variables          String?
+
+  template Template? @relation(fields: [template_id], references: [id])
+  creator  User?     @relation(fields: [created_by_user_id], references: [id])
+  account  Account   @relation(fields: [account_id], references: [id])
+
+  @@index([account_id, id], name: "index_submissions_on_account_id_and_id")
+  @@index([account_id, template_id, id], name: "index_submissions_on_account_id_and_template_id_and_id")
+  @@index([account_id, template_id, id], name: "index_submissions_on_account_id_and_template_id_and_id_archived")
+  @@index([created_by_user_id], name: "index_submissions_on_created_by_user_id")
+  @@index([template_id], name: "index_submissions_on_template_id")
+  @@map("submissions")
+}
+
+model Submitter {
+  id           BigInt   @id @default(autoincrement())
+  submission_id BigInt
+  uuid         String   @unique
+  email        String?
+  slug         String   @unique
+  values       String
+  ua           String?
+  ip           String?
+  sent_at      DateTime?
+  opened_at    DateTime?
+  completed_at DateTime?
+  created_at   DateTime
+  updated_at   DateTime
+  name         String?
+  phone        String?
+  external_id  String?
+  preferences  String
+  metadata     String
+  account_id   BigInt
+  declined_at  DateTime?
+  timezone     String?
+
+  submission Submission @relation(fields: [submission_id], references: [id])
+
+  @@index([account_id, id], name: "index_submitters_on_account_id_and_id")
+  @@index([completed_at, account_id], name: "index_submitters_on_completed_at_and_account_id")
+  @@index([email], name: "index_submitters_on_email")
+  @@index([external_id], name: "index_submitters_on_external_id")
+  @@index([submission_id], name: "index_submitters_on_submission_id")
+  @@map("submitters")
+}
+
+model TemplateAccess {
+  id          BigInt   @id @default(autoincrement())
+  template_id BigInt
+  user_id     BigInt
+  created_at  DateTime
+  updated_at  DateTime
+
+  template Template @relation(fields: [template_id], references: [id])
+  user     User     @relation(fields: [user_id], references: [id])
+
+  @@unique([template_id, user_id], name: "index_template_accesses_on_template_id_and_user_id")
+  @@map("template_accesses")
+}
+
+model TemplateFolder {
+  id              BigInt   @id @default(autoincrement())
+  name            String
+  author_id       BigInt
+  account_id      BigInt
+  archived_at     DateTime?
+  created_at      DateTime
+  updated_at      DateTime
+  parent_folder_id BigInt?
+
+  author  User?        @relation(fields: [author_id], references: [id])
+  account Account      @relation(fields: [account_id], references: [id])
+  parent  TemplateFolder? @relation("TemplateFolderParent", fields: [parent_folder_id], references: [id])
+
+  @@index([account_id], name: "index_template_folders_on_account_id")
+  @@index([author_id], name: "index_template_folders_on_author_id")
+  @@index([parent_folder_id], name: "index_template_folders_on_parent_folder_id")
+  @@map("template_folders")
+}
+
+model TemplateSharing {
+  id          BigInt   @id @default(autoincrement())
+  template_id BigInt
+  account_id  BigInt
+  ability     String
+  created_at  DateTime
+  updated_at  DateTime
+
+  template Template @relation(fields: [template_id], references: [id])
+
+  @@unique([account_id, template_id], name: "index_template_sharings_on_account_id_and_template_id")
+  @@index([template_id], name: "index_template_sharings_on_template_id")
+  @@map("template_sharings")
+}
+
+model Template {
+  id               BigInt   @id @default(autoincrement())
+  slug             String   @unique
+  name             String
+  schema           String
+  fields           String
+  submitters       String
+  author_id        BigInt
+  account_id       BigInt
+  archived_at      DateTime?
+  created_at       DateTime
+  updated_at       DateTime
+  source           String
+  folder_id        BigInt
+  external_id      String?
+  preferences      String
+  shared_link      Boolean  @default(false)
+  variables_schema String?
+
+  author  User          @relation(fields: [author_id], references: [id])
+  account Account       @relation(fields: [account_id], references: [id])
+  folder  TemplateFolder @relation(fields: [folder_id], references: [id])
+
+  @@index([account_id, folder_id, id], name: "index_templates_on_account_id_and_folder_id_and_id")
+  @@index([account_id, id], name: "index_templates_on_account_id_and_id_archived")
+  @@index([account_id], name: "index_templates_on_account_id")
+  @@index([author_id], name: "index_templates_on_author_id")
+  @@index([external_id], name: "index_templates_on_external_id")
+  @@index([folder_id], name: "index_templates_on_folder_id")
+  @@map("templates")
+}
+
+model UserConfig {
+  id         BigInt   @id @default(autoincrement())
+  user_id    BigInt
+  key        String
+  value      String
+  created_at DateTime
+  updated_at DateTime
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@unique([user_id, key], name: "index_user_configs_on_user_id_and_key")
+  @@index([user_id], name: "index_user_configs_on_user_id")
+  @@map("user_configs")
+}
+
+model User {
+  id                     BigInt   @id @default(autoincrement())
+  first_name             String?
+  last_name              String?
+  email                  String   @unique
+  role                   String
+  encrypted_password     String
+  account_id             BigInt
+  reset_password_token   String?  @unique
+  reset_password_sent_at DateTime?
+  remember_created_at    DateTime?
+  sign_in_count          Int      @default(0)
+  current_sign_in_at     DateTime?
+  last_sign_in_at        DateTime?
+  current_sign_in_ip     String?
+  last_sign_in_ip        String?
+  failed_attempts        Int      @default(0)
+  unlock_token           String?  @unique
+  locked_at              DateTime?
+  archived_at            DateTime?
+  created_at             DateTime
+  updated_at             DateTime
+  uuid                   String   @unique
+  otp_secret             String?
+  consumed_timestep      Int?
+  otp_required_for_login Boolean  @default(false)
+
+  account Account @relation(fields: [account_id], references: [id])
+
+  @@index([account_id], name: "index_users_on_account_id")
+  @@map("users")
+}
+
+model WebhookUrl {
+  id         BigInt   @id @default(autoincrement())
+  account_id BigInt
+  url        String
+  events     String
+  sha1       String
+  secret     String
+  created_at DateTime
+  updated_at DateTime
+
+  account Account @relation(fields: [account_id], references: [id])
+
+  @@index([account_id], name: "index_webhook_urls_on_account_id")
+  @@index([sha1], name: "index_webhook_urls_on_sha1")
+  @@map("webhook_urls")
+}
+
+model WebhookEvent {
+  id            BigInt   @id @default(autoincrement())
+  uuid          String
+  webhook_url_id BigInt
+  account_id    BigInt
+  record_id     BigInt
+  record_type   String
+  event_type    String
+  status        String
+  created_at    DateTime
+  updated_at    DateTime
+
+  // 실제 schema.rb에는 FK가 webhook_url_id/account_id에 안 걸려 있어서 관계는 생략
+  @@unique([uuid, webhook_url_id], name: "index_webhook_events_on_uuid_and_webhook_url_id")
+  @@index([webhook_url_id, id], name: "index_webhook_events_error")
+  @@index([webhook_url_id, id], name: "index_webhook_events_on_webhook_url_id_and_id")
+  @@map("webhook_events")
+}
+
+model WebhookAttempt {
+  id                   BigInt   @id @default(autoincrement())
+  webhook_event_id     BigInt
+  response_body        String?
+  response_status_code Int
+  attempt              Int
+  created_at           DateTime
+  updated_at           DateTime
+
+  @@index([webhook_event_id], name: "index_webhook_attempts_on_webhook_event_id")
+  @@map("webhook_attempts")
 }
